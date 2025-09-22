@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kahoot-Like Quiz App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.firebase = {
+      initializeApp,
+      getAuth,
+      signInAnonymously,
+      signInWithCustomToken,
+      onAuthStateChanged,
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      onSnapshot,
+      updateDoc,
+      arrayUnion,
+      collection,
+      getDocs,
+      addDoc
+    };
+  </script>
+</head>
+<body class="bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center min-h-screen font-sans antialiased text-white">
+
+  <!-- Main container for the React app -->
+  <div id="root"></div>
+
+  <!-- React component code with Babel for JSX support -->
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, getDocs, addDoc } = window.firebase;
+
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCeqwvVFwmOxIoSWI9qk64t9lnjwxYtrOs",
+      authDomain: "edunish-211d0.firebaseapp.com",
+      projectId: "edunish-211d0",
+      storageBucket: "edunish-211d0.firebasestorage.app",
+      messagingSenderId: "1002400429038",
+      appId: "1:1002400429038:web:12ee9a586de10e518694ff",
+      measurementId: "G-7ZSDMMKFQ0"
+    };
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+    // The main application component
+    const App = () => {
+      // State variables
+      const [db, setDb] = useState(null);
+      const [auth, setAuth] = useState(null);
+      const [userId, setUserId] = useState(null);
+      const [isAuthReady, setIsAuthReady] = useState(false);
+      const [loadingMessage, setLoadingMessage] = useState("Connecting to Firebase...");
+
+      // Game state
+      const [currentPage, setCurrentPage] = useState('home'); // 'home', 'create_quiz', 'join_quiz', 'host_game', 'play_game'
+      const [isHost, setIsHost] = useState(false);
+      const [gameId, setGameId] = useState('');
+      const [username, setUsername] = useState('');
+      const [gameData, setGameData] = useState(null);
+      const [playerAnswer, setPlayerAnswer] = useState(null);
+      const [playerIsCorrect, setPlayerIsCorrect] = useState(null);
+      const [showAnswerResult, setShowAnswerResult] = useState(false);
+      const [playerHasAnswered, setPlayerHasAnswered] = useState(false);
+      const [showScores, setShowScores] = useState(false);
+
+      // Quiz creation state
+      const [quizTitle, setQuizTitle] = useState('');
+      const [quizQuestions, setQuizQuestions] = useState([]);
+      const [quizzes, setQuizzes] = useState([]);
+      const [selectedQuiz, setSelectedQuiz] = useState(null);
+
+      // Custom message box to replace alert()
+      const showMessage = (message, type = 'info') => {
+        const modal = document.createElement('div');
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900 bg-opacity-70 backdrop-blur-sm";
+        modal.innerHTML = `
+          <div class="bg-white rounded-2xl p-8 shadow-2xl max-w-sm w-full text-center transform transition-transform duration-300 scale-95 opacity-0">
+            <div class="flex items-center justify-center mb-4">
+              ${type === 'info' ? `<i class="fas fa-info-circle text-blue-500 text-3xl"></i>` : `<i class="fas fa-check-circle text-green-500 text-3xl"></i>`}
+            </div>
+            <p class="text-xl font-semibold text-gray-800 mb-6">${message}</p>
+            <button class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all transform hover:scale-105 shadow-md">Got It</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        setTimeout(() => modal.querySelector('div').style.cssText = "transform: scale(1); opacity: 1;", 10);
+        modal.querySelector('button').onclick = () => document.body.removeChild(modal);
+      };
+
+      // Initialize Firebase and auth state
+      useEffect(() => {
+        try {
+          const app = initializeApp(firebaseConfig);
+          const firestore = getFirestore(app);
+          const authentication = getAuth(app);
+          setDb(firestore);
+          setAuth(authentication);
+
+          const unsubscribe = onAuthStateChanged(authentication, async (user) => {
+            if (user) {
+              setUserId(user.uid);
+            } else {
+              try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                  await signInWithCustomToken(authentication, __initial_auth_token);
+                } else {
+                  await signInAnonymously(authentication);
+                }
+              } catch (error) {
+                console.error("Firebase Auth Error:", error);
+                await signInAnonymously(authentication);
+              }
+            }
+            setIsAuthReady(true);
+            setLoadingMessage(null);
+          });
+          return () => unsubscribe();
+        } catch (e) {
+          console.error("Firebase initialization failed:", e);
+          setIsAuthReady(false);
+          setLoadingMessage("Firebase initialization failed. Check your configuration.");
+        }
+      }, []);
+
+      // Set up real-time listener for game data
+      useEffect(() => {
+        if (!db || !gameId || currentPage !== 'host_game' && currentPage !== 'play_game') return;
+
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${gameId}`);
+        const unsubscribe = onSnapshot(gameDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setGameData(data);
+
+            if (!isHost && data.status === 'in-progress' && data.currentQuestionIndex !== -1) {
+              setPlayerHasAnswered(false);
+              setShowAnswerResult(false);
+              setPlayerIsCorrect(null);
+              setPlayerAnswer(null);
+            }
+          } else {
+            setGameData(null);
+            if (isHost) {
+              showMessage("The game has been ended by the host.", 'info');
+            }
+            setCurrentPage('home');
+            setGameId('');
+          }
+        });
+        return () => unsubscribe();
+      }, [db, gameId, isHost, currentPage]);
+
+      // Handle game creation for the host
+      const handleCreateGame = async () => {
+        setLoadingMessage("Creating game...");
+        const newGameId = crypto.randomUUID().substring(0, 8).toUpperCase();
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${newGameId}`);
+        try {
+          await setDoc(gameDocRef, {
+            hostId: userId,
+            status: 'waiting',
+            quizId: selectedQuiz.id,
+            currentQuestionIndex: -1,
+            players: [],
+            playerAnswers: {},
+            scores: {},
+          });
+          setGameId(newGameId);
+          setIsHost(true);
+          setCurrentPage('host_game');
+          setLoadingMessage(null);
+        } catch (e) {
+          console.error("Error creating game: ", e);
+          showMessage("Failed to create game. Please try again.", 'info');
+          setLoadingMessage(null);
+        }
+      };
+
+      // Handle joining a game for a player
+      const handleJoinGame = async (e) => {
+        e.preventDefault();
+        setLoadingMessage("Joining game...");
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${gameId}`);
+        const gameSnap = await getDoc(gameDocRef);
+
+        if (gameSnap.exists()) {
+          const gameData = gameSnap.data();
+          if (gameData.players.length >= 5) {
+             showMessage("This game is full. Please try another one.", 'info');
+             setLoadingMessage(null);
+             return;
+          }
+          if (!gameData.players.find(p => p.id === userId)) {
+            await updateDoc(gameDocRef, {
+              players: arrayUnion({ id: userId, username, score: 0 }),
+            });
+          }
+          setCurrentPage('play_game');
+          setLoadingMessage(null);
+        } else {
+          showMessage("Game not found. Please check the Game ID.", 'info');
+          setLoadingMessage(null);
+        }
+      };
+
+      // Handle starting the quiz for the host
+      const handleStartQuiz = async () => {
+        if (!gameData || !isHost) return;
+        setLoadingMessage("Starting quiz...");
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${gameId}`);
+        const quizDocRef = doc(db, `/artifacts/${appId}/public/data/quizzes/${gameData.quizId}`);
+        const quizSnap = await getDoc(quizDocRef);
+
+        if (quizSnap.exists()) {
+            const quizData = quizSnap.data();
+            await updateDoc(gameDocRef, {
+              status: 'in-progress',
+              currentQuestionIndex: 0,
+              questions: quizData.questions,
+              playerAnswers: {},
+            });
+            setLoadingMessage(null);
+        } else {
+            showMessage("Quiz data not found for this game.", 'info');
+            setLoadingMessage(null);
+        }
+      };
+
+      // Handle advancing to the next question for the host
+      const handleNextQuestion = async () => {
+        if (!gameData || !isHost) return;
+        setLoadingMessage("Moving to next question...");
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${gameId}`);
+        const nextQuestionIndex = gameData.currentQuestionIndex + 1;
+
+        const updatedScores = { ...(gameData.scores || {}) };
+        const currentQuestion = gameData.questions[gameData.currentQuestionIndex];
+        if (currentQuestion) {
+          Object.keys(gameData.playerAnswers).forEach(playerId => {
+            const answer = gameData.playerAnswers[playerId];
+            if (answer === currentQuestion.correctAnswer) {
+              updatedScores[playerId] = (updatedScores[playerId] || 0) + 1;
+            }
+          });
+        }
+
+        if (nextQuestionIndex < gameData.questions.length) {
+          await updateDoc(gameDocRef, {
+            currentQuestionIndex: nextQuestionIndex,
+            playerAnswers: {},
+            scores: updatedScores,
+          });
+        } else {
+          await updateDoc(gameDocRef, {
+            status: 'finished',
+            scores: updatedScores,
+          });
+        }
+        setLoadingMessage(null);
+      };
+
+      // Handle player submitting an answer
+      const handleAnswerSubmit = async (answer) => {
+        if (!db || !gameId || playerHasAnswered) return;
+        const gameDocRef = doc(db, `/artifacts/${appId}/public/data/games/${gameId}`);
+        const currentQuestion = gameData.questions[gameData.currentQuestionIndex];
+        const isCorrect = answer === currentQuestion.correctAnswer;
+        setPlayerIsCorrect(isCorrect);
+        setShowAnswerResult(true);
+        setPlayerAnswer(answer);
+
+        await updateDoc(gameDocRef, {
+          playerAnswers: {
+            ...gameData.playerAnswers,
+            [userId]: answer,
+          },
+        });
+        setPlayerHasAnswered(true);
+      };
+
+      // Quiz creation handlers
+      const addQuestion = (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const newQuestion = {
+          question: form.question.value,
+          options: [
+            form.option1.value,
+            form.option2.value,
+            form.option3.value,
+            form.option4.value,
+          ],
+          correctAnswer: form.correctAnswer.value,
+        };
+        setQuizQuestions([...quizQuestions, newQuestion]);
+        form.reset();
+      };
+
+      const handleSaveQuiz = async () => {
+        if (!quizTitle || quizQuestions.length === 0) {
+          showMessage("Please add a title and at least one question.", 'info');
+          return;
+        }
+        setLoadingMessage("Saving quiz series...");
+        try {
+          await addDoc(collection(db, `/artifacts/${appId}/public/data/quizzes`), {
+            title: quizTitle,
+            questions: quizQuestions,
+            hostId: userId,
+          });
+          showMessage("Quiz series saved successfully!", 'success');
+          setCurrentPage('home');
+          setQuizTitle('');
+          setQuizQuestions([]);
+        } catch (e) {
+          console.error("Error saving quiz: ", e);
+          showMessage("Failed to save quiz. Please try again.", 'info');
+        }
+        setLoadingMessage(null);
+      };
+
+      const fetchQuizzes = async () => {
+        setLoadingMessage("Fetching available quizzes...");
+        try {
+          const querySnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/quizzes`));
+          const quizList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setQuizzes(quizList);
+        } catch (e) {
+          console.error("Error fetching quizzes:", e);
+          showMessage("Failed to load quizzes.", 'info');
+        }
+        setLoadingMessage(null);
+      };
+
+      // Render functions for each page
+      const renderHomePage = () => (
+        <div className="bg-white p-10 rounded-3xl shadow-2xl text-center max-w-lg w-full transform transition-all duration-500 scale-100 hover:scale-105">
+          <h1 className="text-5xl font-extrabold text-indigo-700 mb-6 font-display">Quiz Spark</h1>
+          <p className="text-gray-600 mb-8 font-medium">Create or join a live quiz game with friends!</p>
+          <div className="space-y-4">
+            <button
+              onClick={() => setCurrentPage('create_quiz')}
+              className="w-full px-6 py-4 bg-purple-600 text-white rounded-xl font-bold text-lg shadow-lg hover:bg-purple-700 transition-colors transform hover:scale-105"
+            >
+              Create New Quiz Series
+            </button>
+            <button
+              onClick={() => { setCurrentPage('join_quiz'); fetchQuizzes(); }}
+              className="w-full px-6 py-4 bg-yellow-400 text-yellow-900 rounded-xl font-bold text-lg shadow-lg hover:bg-yellow-500 transition-colors transform hover:scale-105"
+            >
+              Join a Game
+            </button>
+          </div>
+        </div>
+      );
+
+      const renderCreateQuizPage = () => (
+        <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-800 w-full max-w-2xl">
+          <button onClick={() => setCurrentPage('home')} className="mb-6 text-indigo-600 hover:underline font-semibold">
+            &larr; Back to Home
+          </button>
+          <h2 className="text-4xl font-extrabold text-indigo-700 mb-6">Create Your Quiz</h2>
+          <div className="mb-6">
+            <label className="block text-xl font-semibold mb-2">Quiz Series Title</label>
+            <input
+              type="text"
+              value={quizTitle}
+              onChange={(e) => setQuizTitle(e.target.value)}
+              placeholder="e.g., General Knowledge Trivia"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg"
+            />
+          </div>
+          <h3 className="text-3xl font-bold text-purple-600 mb-4">Add Questions</h3>
+          <div className="space-y-6">
+            {quizQuestions.map((q, index) => (
+              <div key={index} className="bg-gray-100 p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <p className="text-lg font-semibold mb-2">Question {index + 1}: {q.question}</p>
+                <ul className="list-disc list-inside text-sm">
+                  {q.options.map((opt, i) => (
+                    <li key={i} className={opt === q.correctAnswer ? "text-green-600 font-bold" : ""}>
+                      {opt} {opt === q.correctAnswer && <i className="fas fa-check-circle ml-1"></i>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={addQuestion} className="mt-8 space-y-4 p-8 bg-gray-50 rounded-2xl border border-gray-200">
+            <h4 className="text-2xl font-bold text-indigo-700">New Question</h4>
+            <input name="question" type="text" placeholder="Enter question text" required className="w-full px-4 py-3 border rounded-lg" />
+            <div className="grid grid-cols-2 gap-4">
+              <input name="option1" type="text" placeholder="Option A" required className="px-4 py-3 border rounded-lg" />
+              <input name="option2" type="text" placeholder="Option B" required className="px-4 py-3 border rounded-lg" />
+              <input name="option3" type="text" placeholder="Option C" required className="px-4 py-3 border rounded-lg" />
+              <input name="option4" type="text" placeholder="Option D" required className="px-4 py-3 border rounded-lg" />
+            </div>
+            <select name="correctAnswer" className="w-full px-4 py-3 border rounded-lg" required>
+              <option value="">Select Correct Answer</option>
+              <option value="Option A">Option A</option>
+              <option value="Option B">Option B</option>
+              <option value="Option C">Option C</option>
+              <option value="Option D">Option D</option>
+            </select>
+            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-colors">Add Question</button>
+          </form>
+
+          <button onClick={handleSaveQuiz} className="mt-8 w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 transition-colors shadow-lg">
+            Save Quiz Series
+          </button>
+        </div>
+      );
+
+      const renderJoinQuizPage = () => (
+        <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-800 w-full max-w-lg">
+          <button onClick={() => setCurrentPage('home')} className="mb-6 text-indigo-600 hover:underline font-semibold">
+            &larr; Back to Home
+          </button>
+          <h2 className="text-4xl font-extrabold text-indigo-700 mb-6">Join a Quiz</h2>
+          <div className="mb-6">
+            <label className="block text-xl font-semibold mb-2">Select a Quiz Series</label>
+            {quizzes.length > 0 ? (
+              <ul className="space-y-4 max-h-64 overflow-y-auto pr-2">
+                {quizzes.map(quiz => (
+                  <li key={quiz.id} onClick={() => setSelectedQuiz(quiz)}
+                    className={`p-4 rounded-xl cursor-pointer shadow-md transition-all duration-200
+                      ${selectedQuiz?.id === quiz.id ? 'bg-indigo-200 border-2 border-indigo-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                    <p className="text-lg font-bold">{quiz.title}</p>
+                    <p className="text-sm text-gray-500">by Host ID: <span className="font-mono text-xs">{quiz.hostId.substring(0, 8)}...</span></p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">No quizzes available. Ask a host to create one!</p>
+            )}
+          </div>
+          {selectedQuiz && (
+            <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 space-y-4">
+              <h3 className="text-2xl font-bold text-indigo-700">Host Game for: {selectedQuiz.title}</h3>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateGame(); }}>
+                 <button
+                   type="submit"
+                   className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-colors"
+                 >
+                   Start Game
+                 </button>
+              </form>
+            </div>
+          )}
+          <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mt-6">
+            <h3 className="text-2xl font-bold text-indigo-700 mb-4">Join an Existing Game</h3>
+            <form onSubmit={handleJoinGame} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="text"
+                placeholder="Enter Game ID"
+                value={gameId}
+                onChange={(e) => setGameId(e.target.value)}
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <button
+                type="submit"
+                disabled={!username || !gameId}
+                className={`w-full px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg
+                  ${!username || !gameId ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+              >
+                Join Game
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+
+      const renderGameView = () => {
+        if (!gameData) {
+          return (
+            <div className="text-center p-8 bg-white rounded-3xl shadow-2xl text-gray-800">
+              <p className="text-xl font-bold">Game not found. Please try another ID.</p>
+              <button
+                onClick={() => { setGameId(''); setIsHost(false); setCurrentPage('home'); }}
+                className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
+          );
+        }
+
+        const currentQuestion = gameData.questions && gameData.questions.length > gameData.currentQuestionIndex ? gameData.questions[gameData.currentQuestionIndex] : null;
+
+        if (gameData.status === 'finished') {
+           const sortedPlayers = [...gameData.players].sort((a, b) => (gameData.scores[b.id] || 0) - (gameData.scores[a.id] || 0));
+           return (
+            <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-800 w-full max-w-lg text-center">
+              <h3 className="text-4xl font-extrabold text-indigo-700 mb-6">Final Scores!</h3>
+              <ul className="space-y-4 mb-8">
+                {sortedPlayers.map((player, index) => (
+                  <li key={player.id} className="text-xl font-medium bg-gray-100 p-4 rounded-xl shadow-inner flex items-center justify-between">
+                    <span className="font-bold text-gray-700 mr-2">{index + 1}.</span>
+                    <span>{player.username}</span>
+                    <span className="font-bold text-indigo-600 text-2xl">{gameData.scores[player.id] || 0}</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => { setGameId(''); setIsHost(false); setCurrentPage('home'); }}
+                className="w-full px-6 py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg transition-all transform hover:scale-105"
+              >
+                End Game
+              </button>
+            </div>
+          );
+        }
+
+        // Host View
+        if (isHost) {
+          const totalPlayers = gameData.players.length;
+          const answeredPlayers = Object.keys(gameData.playerAnswers).length;
+          return (
+            <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-800 w-full max-w-2xl text-center">
+              <h2 className="text-4xl font-extrabold text-purple-700 mb-4">Host View</h2>
+              <div className="mb-8 p-4 bg-gray-100 rounded-xl border border-gray-200">
+                <p className="text-xl font-medium text-gray-600">Quiz ID: <span className="font-mono text-xl font-bold text-blue-600">{gameId}</span></p>
+                <p className="text-lg text-gray-500">Share this ID with players!</p>
+              </div>
+
+              {gameData.status === 'waiting' && (
+                <div>
+                  <h3 className="text-3xl font-bold text-green-700 mb-4">Players Joined ({totalPlayers})</h3>
+                  <ul className="list-disc list-inside mb-6 space-y-2 text-left">
+                    {gameData.players.map((player) => (
+                      <li key={player.id} className="text-lg text-gray-700">{player.username}</li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={handleStartQuiz}
+                    disabled={totalPlayers === 0}
+                    className={`w-full px-6 py-4 rounded-xl text-white font-bold transition-all transform hover:scale-105 shadow-lg
+                      ${totalPlayers === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                  >
+                    {totalPlayers === 0 ? 'Waiting for players...' : 'Start Quiz'}
+                  </button>
+                </div>
+              )}
+
+              {gameData.status === 'in-progress' && currentQuestion && (
+                <div>
+                  <h3 className="text-3xl font-bold mb-2 text-purple-700">Question {gameData.currentQuestionIndex + 1}/{gameData.questions.length}</h3>
+                  <p className="text-2xl mb-6 font-semibold text-gray-800">{currentQuestion.question}</p>
+                  <ul className="space-y-3 mb-6">
+                    {currentQuestion.options.map((option, index) => (
+                      <li key={index} className="bg-gray-200 p-4 rounded-xl text-lg text-left shadow-sm">
+                        {option}
+                        {option === currentQuestion.correctAnswer && (
+                          <span className="ml-2 text-green-600 font-bold"><i className="fas fa-check-circle"></i></span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <h4 className="text-xl font-semibold mb-2 text-gray-700">Answers Received ({answeredPlayers}/{totalPlayers})</h4>
+                  <ul className="space-y-1 mb-6 max-h-40 overflow-y-auto pr-2 text-left">
+                    {gameData.players.map(player => (
+                      <li key={player.id} className="text-gray-700">
+                        {gameData.playerAnswers[player.id] ?
+                         <span className="text-green-600"><i className="fas fa-check"></i> {player.username} Answered</span> :
+                         <span className="text-gray-400"><i className="fas fa-hourglass-half"></i> {player.username} Thinking</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={handleNextQuestion}
+                    className="w-full px-6 py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-lg transition-all transform hover:scale-105"
+                  >
+                    {gameData.currentQuestionIndex === gameData.questions.length - 1 ? 'Show Final Scores' : 'Next Question'}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Player View
+        else {
+          const playerState = gameData.players.find(p => p.id === userId);
+          return (
+            <div className="bg-white p-10 rounded-3xl shadow-2xl text-gray-800 w-full max-w-lg text-center">
+              <h2 className="text-4xl font-extrabold text-blue-700 mb-6">Player View</h2>
+              <div className="mb-8 p-4 bg-gray-100 rounded-xl border border-gray-200">
+                <p className="text-xl font-medium text-gray-600 mb-1">Game ID: <span className="font-mono text-xl font-bold text-blue-600">{gameId}</span></p>
+                <p className="text-lg text-gray-700">You are playing as <span className="font-bold text-purple-600">{playerState?.username || 'Player'}</span></p>
+              </div>
+
+              {gameData.status === 'waiting' && (
+                <div>
+                  <h3 className="text-3xl font-bold text-indigo-700 mb-4">Waiting for host to start...</h3>
+                  <p className="text-lg text-gray-700">Get ready to play!</p>
+                  <ul className="list-disc list-inside mt-4 text-left">
+                    {gameData.players.map((player) => (
+                      <li key={player.id} className="text-lg text-gray-700">{player.username}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {gameData.status === 'in-progress' && currentQuestion && (
+                <div>
+                  <h3 className="text-3xl font-bold mb-4 text-purple-700">Question {gameData.currentQuestionIndex + 1}</h3>
+                  <p className="text-2xl mb-6 font-semibold text-gray-800">{currentQuestion.question}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {currentQuestion.options.map((option, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleAnswerSubmit(option)}
+                        disabled={playerHasAnswered}
+                        className={`px-4 py-6 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-md
+                          ${playerHasAnswered && option === playerAnswer ?
+                            (playerIsCorrect ? 'bg-green-500 text-white' : 'bg-red-500 text-white')
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'}
+                          ${playerHasAnswered ? 'cursor-not-allowed opacity-75' : ''}
+                        `}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+
+                  {showAnswerResult && (
+                    <div className="mt-6 text-2xl font-bold">
+                      {playerIsCorrect ? (
+                        <p className="text-green-600">Correct! Well done.</p>
+                      ) : (
+                        <p className="text-red-600">Incorrect. The answer was: <span className="text-blue-600">{currentQuestion.correctAnswer}</span></p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        }
+      };
+
+      const renderCurrentPage = () => {
+        if (loadingMessage) {
+          return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-800">
+              <p className="text-xl font-semibold">{loadingMessage}</p>
+            </div>
+          );
+        }
+
+        switch (currentPage) {
+          case 'home':
+            return renderHomePage();
+          case 'create_quiz':
+            return renderCreateQuizPage();
+          case 'join_quiz':
+            return renderJoinQuizPage();
+          case 'host_game':
+          case 'play_game':
+            return renderGameView();
+          default:
+            return renderHomePage();
+        }
+      };
+
+      if (!isAuthReady) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white">
+            <p className="text-xl font-semibold">Connecting to Firebase...</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex items-center justify-center w-full min-h-screen p-4">
+          <div className="max-w-4xl w-full">
+            {renderCurrentPage()}
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+
+</body>
+</html>
