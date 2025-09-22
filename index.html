@@ -333,18 +333,29 @@
         setLoadingMessage(null);
       };
 
-      const fetchQuizzes = async () => {
-        setLoadingMessage("Fetching available quizzes...");
-        try {
-          const querySnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/quizzes`));
-          const quizList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setQuizzes(quizList);
-        } catch (e) {
-          console.error("Error fetching quizzes:", e);
-          showMessage("Failed to load quizzes.", 'info');
-        }
-        setLoadingMessage(null);
-      };
+    const fetchQuizzes = () => {
+  if (!db) return;
+  setLoadingMessage("Fetching available quizzes...");
+
+  const quizRef = collection(db, `/artifacts/${appId}/public/data/quizzes`);
+
+  const unsub = onSnapshot(
+    quizRef,
+    (snap) => {
+      const allQuizzes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setQuizzes(allQuizzes); // ✅ Always update with full list
+      setLoadingMessage(null);
+    },
+    (err) => {
+      console.error("Error fetching quizzes:", err);
+      showMessage("Failed to load quizzes.", "info");
+      setLoadingMessage(null);
+    }
+  );
+
+  return () => unsub(); // optional: lets you clean up listener if needed
+};
+
 
       // Render functions for each page
       const renderHomePage = () => (
