@@ -520,12 +520,20 @@
             <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 space-y-4">
               <h3 className="text-2xl font-bold text-indigo-700">Selected Quiz: {selectedQuiz.title}</h3>
               <p className="text-gray-600">This quiz has {selectedQuiz.questions.length} questions.</p>
-              <button
-                onClick={handleStartSolo}
-                className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-colors"
-              >
-                Play Solo
-              </button>
+              <div className="grid grid-cols-2 gap-4">
+                 <button
+                   onClick={handleStartSolo}
+                   className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-colors"
+                 >
+                   Play Solo
+                 </button>
+                 <button
+                   onClick={handleCreateGame}
+                   className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
+                 >
+                   Host Multiplayer Game
+                 </button>
+              </div>
             </div>
           )}
           <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mt-6">
